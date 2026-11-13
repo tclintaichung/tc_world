@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Preface - TC World</title>
+  </head>
+  <body>
+    <h1>Preface</h1>
+    <h1>前言</h1>
+    <p>
+本书主要谈嵌入式微控制器的即时作业系统(Real-Time Operation System；RTOS)的应用。首先看我们手边所使用的手機、电脑，无论它的CPU是几个核心(core)，它们在运作时都是由作业系统控制，如Android、Windows 、Linux等，它们是多工、多执行绪作业系统，基本上是属于即时作业系统，也就是多个应用程序可以同时进行，我们一边进行文书作业，一边听YouTube音乐，同时透过LINE与其他组员传递讯息，如果在无在外因素干扰下：例如网络畅通与否，彼此之间是不会发生延迟反应，这些应用都在你我指缝中自然运行无阻，而通常我们不会察觉它其实是在即时作业系统控制下才可以呈现的功能。而嵌入式微控制器，早期是单一核心，现已由原有单核发展至2核、或甚至多核，由于嵌入式微控制器并没有作业系统，无法像手机或电脑般执行各项作业，但所幸有例如FreeRTOS提供即时作业系统的功能，使得微控制器也可以执行即时作业。因此，本书的重点即是围绕在Espressif公司根据FreeRTOS所发展出来的即时代理系统，将它们应用至ESP32。本书主要参考ESP-IDF DOC(官网：https://docs.espressif.com/projects/esp-idf/en/stable/esp32/index.html)，它的内容相当丰富多样。笔者精心测试挑选最符合需求的项目。
+
+ESP-IDF特色是
+<ul>
+    <li>函数多，名称长：小写英文字组合，例如：xTaskCreate</li>
+    <li>巨集多：大寫英文字組合，例如：WIFI_INIT_CONFIG_DEFAULT</li>
+    <li>常數多：大寫英文字、數字組合，例如：GPIO_NUM_15</li>
+    <li>範例多</li>
+</ul>
+從以上的特色看來，很容易讓人感覺應用ESP-IDF開發專案的門檻應該很高，尤其對原本習慣使用Arduino IDE的開發人員而言，感觸應該更為強烈。的確，ESP-IDF是屬於進階開發環境，它的功能眾多，應用可謂包羅萬象，從程式編譯、連結、到寫入快閃記憶體，步驟相對複雜。ESP-IDF的主要優勢在於它是ESP32晶片製造廠商Espressif公司直接開發、維護與支援，支援所有ESP32產品，而且更新ESP-IDF版本的頻率高，隨時可以掌握官方發行的第一手資料。當然ESP-IDF也提供支援Arduino IDE的模組，只是它的版本往往落後許多，無法與ESP-IDF同步；目前ESP-IDF穩定版本5.2.2，Arduino-ESP32使用版本5.0.0。
+
+本書歸納整理常用而且重要的ESP-IDF規則與樣態，讀者只需熟悉這些規則與樣態，即可舉一反三，輕易施行在其他應用。
+
+請準備一個ESP32，可以選用NodeMCU-32S或ESP32-S3-DEV-KIT開發板，以micro-USB或USB Type-C電纜線連上電腦，開始展開ESP-IDF之旅。</p>
+  </body>
+</html>
