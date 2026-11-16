@@ -1,0 +1,31 @@
+body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    text-align: justify;
+    margin: 20px;
+}
+h1{
+    color: #231398;
+}
+h2{
+    color: #21a645;
+}
+
+pre{
+    background-color: #f4f4f4;
+    color: #333;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 10px;
+    border-left: 3px solid #ccc;
+    overflow-x: auto;
+}
+.step {
+    background-color: #e0f7fa;
+    color: #00796b;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 10px;
+    border-left: 3px solid #00796b;
+    overflow-x: auto;
+}
