@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 2</title>
+    <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+<h1>第2章 FreeRTOS Part I</h1>
+<h2>2.1 前言</h2>
+Vanilla FreeRTOS是一個輕量、開源的即時作業系統，它可以處理單核心微控制器或系統單晶片(System on a chip；SoC)。ESP-IDF FreeRTOS是根據Vanilla FreeRTOS第10.5.1版做相當幅度的修改，具備處理雙核心(dual-core)、對稱多處理(symmetric multiprocessing；SMP)等功能。所謂對稱多處理(SMP)，它是一種計算架構，有2個以上的CPU或核心連結至一個共享主記憶體，每一個CPU均獨立執行任務，
+同時由單一作業系統控制，這樣可以得到更有效的CPU運用。本書之後所提及的FreeRTOS，即是指ESP-IDF FreeRTOS。主要參考文件<a href="https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/freertos_idf.html?highlight=freertos" target="_blank">FreeRTOS</a>
+<pre>本書所使用的單晶片微控制器ESP32、ESP32-S3具備雙核心，2核心分別為CPU0、CPU1，或以PRO_CPU、APP_CPU代號區分，通常
+    • 與「無線網路」或「藍芽」有關的任務由CPU0負責
+    • 其餘的應用則為CPU1
+    • 直接以0、1指定CPU0、CPU1
+</pre>
+<p>在進入FreeRTOS前，有關設定參數與巨集，必須弄清楚：</p>
+<ol>
+<li>程式內含標頭檔案</li>
+<pre>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+</pre>
+<li>sdkconfig檔案：載明專案使用的配置設定，可以執行menuconfig進行設定，請勿任意更改檔案內容</li>  
+<pre>
+• 雙核設定：CONFIG_SOC_CPU_CORES_NUM=2
+• 單核設定：CONFIG_FREERTOS_UNICORE=y，若雙核晶片，可藉此設定只用CPU0
+• FreeRTOS頻率：CONFIG_FREERTOS_HZ=100
+</pre>
+<li>常用的巨集</li>
+<pre>
+• pdMS_TO_TICK：將ms轉換成tick
+• pdTICK_TO_MS：將tick轉換成ms
+• configTICK_RATE_HZ：預設為100 Hz
+• portTICK_PERIOD_MS：等於1000/configTICK_RATE_HZ，configTICK_RATE_HZ等於100Hz，
+  此值為10ms，1 tick相當於10ms
+  </pre>
+  </ol> 
+  <h2>2.2 任務</h2>
+  <p>一個專案的程式通常會依據需求而有不同的架構，其中序列流(sequential flow)與多工同步(multi-tasking)是主要架構。</p>
+  <h3>1.序列流</h3>
+  <p>在app_main程式中的無窮迴圈while(1)，依序執行每行陳述，例如：printf、vTaskDelay等，必須執行該陳述後，才會移至下一陳述，其他陳述都靜靜等著，這種架構稱之為super-loop，各陳述無法同步執行，架構如下：
+  <br>主程式
+  <pre>while (1) {
+    do Task 1;
+    do Task 2;
+}</pre>
+<h3>2.多工同步</h3>
+<p>微控制器的應用程式由多個任務組成，分別有負責讀取訊號、數位輸出、顯示資料、或資料傳輸等不同需求的任務，每個任務都需要同步執行，即多工(multi-tasking)；也就是不能讓整個程式停駐在一處，只是在等候接收某一感測訊號，在訊號未送達前，其餘任務都閒著等候。因此要有效運用CPU，同步是一個解決的方式，架構如下：主程式產生任務，各任務獨立執行</p>
+  <br>
+  主程式
+  <pre>
+create Task 1;
+create Task 2;
+
+// Task 1
+while (1) {
+	do Task;
+}
+// Task 2
+while (1) {
+	do Task;
+}
+  </pre>
+<p>由於單個CPU一次只能處理一個任務或工作，若有多個任務要執行，理論上是無法同步的，而所謂「即時作業系統」應運而生，它的基本概念就是快速切換執行各任務，使用者感覺就像同步執行。至於切換原則以及工作原理，將在「排程」章節裡說明。</p>
+<h3>3.任務相關函式</h3>
+<p>在這先針對任務(task)進行說明，任務以函式呈現，它的特色</p>
+<pre>
+  • 獨立執行
+  • 無窮迴圈，每間隔一段時間執行一次，例如：100 ms
+  • 沒有回傳值</pre>
+<ol type="i"><li>vTaskDelay：延遲一段時間，引數tick數，此段時間任務處於未阻擋狀態(unblock state)。例如：延遲500 ms，語法為vTaskDelay(500/portTICK_PERIOD_MS)，相當於50 ticks。</li> 
+<li>xTaskCreate：產生新任務，動態配置記憶體，有6個引數</li>
+<pre>
+    • pxTaskCode：任務函式
+    • pcName：描述任務文字，主要用於除錯
+    • ulStackDepth：任務所需推疊記憶體空間，單位為位元組(byte)，與vanilla FreeRTOS不同(使用字組(word))。每一個任務是安排在堆疊記憶區(stack)，而非在堆積(heap)
+    • pvParameters：任務參數指標，可以使用void *
+    • uxPriority：執行任務優先次序，數值越大，越優先執行，範圍分布0 至configMAX_PRIORITIES – 1，configMAX_PRIORITIES定義在FreeRTOSConfig.h，預設25
+    • pxCreatedTask：代碼供任務參考
+  </pre>
+  <li>xTaskCreateStatic：產生任務，指定記憶區，有7個引數，前5個引數與xTaskCreate相同，第6個引數，第7個引數</li>
+  <pre>
+    • puxStackBuffer：指標指向任務所需推疊記憶體空間，資料型態StackType_t、長度ulStackDepth陣列，非動態配置記憶區
+    • pxTaskBuffer： 指標指向任務儲存資料所需記憶體空間，資料型態StaticTask_t
+  </pre>
+  <li>xTaskCreatePinnedToCore：指定執行特定核心(指多核心者，如：ESP32-S3有2個核心)，產生新任務，動態配置記憶體，有7個引數</li>
+  <pre>
+    • pxTaskCode：任務函式
+    • pcName：描述任務文字，主要用於除錯
+    • ulStackDepth：任務所需推疊記憶體空間，單位為位元組(byte)，與vanilla FreeRTOS不同(使用字組(word))
+    • pvParameters：任務參數指標，可以使用void *
+    • uxPriority：執行任務優先次序，數值越大，越優先執行，範圍1至31
+    • pxCreatedTask：代碼供任務參
+    • xCoreID：指定CPU，目前僅支援兩核心，即0(PRO CPU)或1(APP CPU)，若設為tskNO_AFFINITY，表示不指定
+  </pre>
+  <li>xTaskCreateStaticPinnedToCore：指定執行特定核心產生任務(指多核心)，特定記憶區，有7個引數，前5個引數、第8個引數與xTaskCreatePinnedToCore相同，第6、7引數與xTaskCreateStatic相同</li>
+  <li>vTaskDelete：刪除任務，引數為任務代碼，若引數為NULL，刪除目前任務</li>
+  <li>xTaskNotifyIndexed ：傳遞指標通知，4個引數，可傳遞多個通知</li>
+  <pre>
+    • xTaskToNotify：通知任務代碼
+    • uxIndexToNotify：目標任務通知指標，資料型態為uint32_t，需先確定configTASK_NOTIFICATION_ARRAY_ENTRIES設定值，預設值為1，指標只能為0，若設大於或等於1，將無法正常執行程式；可執行SDK configuration editor設定
+    • eAction：
+      - eSetBits：設定位元
+      - eIncrement：累增通知
+      - eSetValueWithOverwrite：覆蓋原值，無論是否已讀，永遠回傳pdPASS
+      - eSetValueWithoutOverwrite：若已收到通知，無待辦通知(notification pending)，覆蓋原值，並回傳pdPASS；反之，仍有待辦通知，回傳pdFAIL
+  </pre>
+  <li>xTaskNotify：傳遞通知，3個引數，僅一個通知，相當於xTaskNotifyIndexed之uxIndexToNotify設為0，其餘引數相同</li>
+  <li>xTaskNotifyWaitIndexed：等候指標通知，5個引數</li>
+  <pre>
+    • uxIndexToWaitOn：目標任務通知指標
+    • ulBitsToClearOnEntry：收到通知時清除通知相關位元，設為pdFALSE，表示不清除
+    • ulBitsToClearOnExit：通知取得資料後清除特定位元，設為0xFFFF或ULONG_MAX(此值定義在limits.h，即0xFFFFFFFFUL)，若設pdFALSE，表示不清除
+    • pulNotificationValue：隨通知傳送資料
+    • xTicksToWait：在阻擋狀態下最長等候通知時間
+  </pre>
+  <li>xTaskNotifyWait：等候一個通知，4個引數，相當於xTaskNotifyWaitIndexed之uxIndexToWaitOn設為0，其餘同</li>
+  <li>vTaskSuspendAll</li>
+  <li>xTaskResumeAll</li>
+<h2>例題2.1</h2>
+<p>每隔1s顯示累增秒數，超過100s後歸零，重新計數。</p>
+<h3>程式說明</h3>
+<ul>
+  <li>內含標頭檔</li>
+  <pre>
+  • stdio.h：標準輸出與輸入
+  • freertos/FreeRTOS.h：FreeRTOS即時作業系統
+  • freertos/task.h：即時工作
+  </pre>
+  <li>app_main</li>
+  </pre>
+  <pre>
+  • 無窮迴圈，每圈延遲1s
+  • 累增計次變數count
+  </pre>
+  <pre>
+#include &ltstdio.h&gt
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+void app_main(void) {
+  int count = 0;
+  while(1) {
+    count++;
+    vTaskDelay( 1000/portTICK_PERIOD_MS);
+    printf("%d seconds passing\n", count);
+    if (count == 100) count = 0;
+    }
+}
+  </pre>
+</ul>  
+<h2>例題2.2</h2>
+<p>同時進行2個獨立任務，</p>
+<ul>
+  <li>任務1：每間隔500ms顯示"Task 1 functioning: %d\n"</li>
+  <li>任務2：每間隔500ms顯示"Task 2 functioning: %d\n"</li>
+</ul>
+<h3>程式說明</h3>
+<ul>
+    <li>任務函式task1、task2：無窮迴圈，每圈延遲500ms</li>
+    <li>app_main：產生2個任務，堆疊空間2048位元組，優先次序10。app_main產生任務後，就無下一步動作。未指定CPU，由作業系統排定執行時程，如何排程會在後面說明。</li>
+</ul>
+<pre>
+#include &ltstdio.h&gt
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+static void task1(void *param) {
+  int count = 0;
+  while (1) {
+    printf("Task 1 functioning: %d\n", count);
+    count++;
+    vTaskDelay(500/portTICK_PERIOD_MS);
+  }
+}
+
+static void task2(void *param) {
+  int count = 0;
+  while (1) {
+    printf("Task 2 functioning: %d\n", count);
+    count++;
+    vTaskDelay(500/portTICK_PERIOD_MS);
+  }
+}
+
+void app_main(void) {
+  xTaskCreate(task1, "First task", 1024*2, NULL, 10, NULL);
+  xTaskCreate(task2, "Second task", 1024*2, NULL, 10, NULL);
+}
+</pre>
+</body>
+</html>
