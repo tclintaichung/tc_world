@@ -7,17 +7,16 @@
 </head>
 <body>
     <h1>第1章 ESP-IDF</h1>
-    <h2>安裝ESP-IDF兩種方式</h2>
-    <p>
+    <h2>1.1 前言</h2>
+    <p>兩種ESP-IDF安裝方式，參考資料：<a href="https://www.espressif.com/en/products/sdks/esp-idf" target="_blank">Espressif官網資料</a>
+        、<a href="https://github.com/espressif/esp-idf" target="_blank">ESP-IDF GitHub</a>
       <ul>
         <li>利用Command Line安裝，這種方式直接，容易掌控</li>
         <li>利用VS Code安裝，這種方式較為簡單，容易上手</li>
-        <li><a href="https://www.espressif.com/en/products/sdks/esp-idf" target="_blank">Espressif官網資料</a>
-        <li><a href="https://github.com/espressif/esp-idf" target="_blank">ESP-IDF GitHub</a></li>
-      </ul>
+           </ul>
       
     </p>
-    <h2>Command Line安裝</h2>
+    <h2>1.2 Command Line安裝</h2>
     <ol>
       <li>執行WSL(Windows Subsystem for Linux)
         <ul>
@@ -142,7 +141,7 @@ $ idf.py -p /dev/ttyACM0 flash
   </ul>
 </li>      
     </ol>
-<h2>VS Code安裝ESP-IDF</h2>
+<h2>1.3 VS Code安裝ESP-IDF</h2>
 <ol>
   <li>執行Visual Studio Code，新增ESP-IDF擴充(Extension)<br>
     <img src="1.png" alt="" width="400" />
@@ -166,8 +165,8 @@ $ idf.py -p /dev/ttyACM0 flash
   <li>通常利用這種方式，頗為費時。建議使用Command Line方式建立專案，然後再利用VS Code進行編輯程式</li>
 </ul>
 </ol>
-<h2>例題1.1</h2>
-<p>利用ESP32-S3開發板執行在終端機顯示Hello ESP-IDF!字串任務</p>
+<h2>1.4 例題</h2>
+<p>例題1.1：利用ESP32-S3開發板執行在終端機顯示Hello ESP-IDF!字串任務</p>
 <p>ESP32-S3<img src="2.png" alt="" width="150" />ESP32-S3 Super Mini<img src="3.png" alt="" width="150" /></p>
 
 <ul>

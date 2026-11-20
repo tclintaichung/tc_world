@@ -1,0 +1,292 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 3</title>
+    <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+<h1>第3章 FreeRTOS (II)</h1>
+<h2>3.1 前言</h2>
+<p>由前面內容，各位對如何產生任務、如何建立任務函式架構，以及運作方式，應該有了基本認識。任一個任務通常處於以下3種狀態之一：</p>
+<ul>
+<li>執行狀態(running state)：任務執行中</li>
+<li>準備好狀態(ready state)：任務已準備好，等待執行</li>
+<li>阻擋狀態(blocked state)：任務因等待某事件而被阻擋</li>
+</ul>
+<p>其中阻擋狀態會在狀態解除後進入準備好狀態。假設任務未指定CPU，即由系統排定CPU執行任務，同時針對準備好狀態的任務進行排程(scheduling)。本章說明如何使用FreeRTOS的排程器(scheduler)來控制任務執行，同時介紹佇列(queues)的使用。</p>
+</p>
+<h2>3.2 排程</h2>
+<p>排程原則：</p>
+<ul>
+<li>優先次序(Fixed priority)：依據優先次序排定執行任務時程，優先值高者先執行。</li>
+<li>搶先佔有(Preemption)：之前被阻擋或暫停的任務，當阻擋解除後可立即執行。</li>
+<li>時間切片(Time slicing)：當數個優先次序相同的任務，是採輪轉方式(round-robin)依序輪流執行，每時間間隔10 ms更換任務，稱為檢查點中斷(tick interrupt)。註：portTICK_PERIOD_MS預設為10 ms。</li>
+</ul>
+<p>以上是在系統排定CPU， 如果指定了CPU(例如：task1指定CPU0)，則排程原則會增加一些複雜度，因為若指定的CPU目前執行其他任務，有可能另一任務(例如：task2)未指定CPU或指定的CPU是可用的，即使它的優先次序低於task1，它可能會先執行。其他在「搶先佔有」或「時間切片」過程中，都會出現類似前述的問題。</p>
+<ol>
+    <li>暫停任務相關函式</li>
+    <ul>
+    <li>vTaskSuspend：暫停任務，引數為任務代碼。INCLUDE_vTaskSuspend預設1，定義在FreeRTOSConfig.h。</li>
+    <li>vTaskResume：恢復任務，引數為任務代碼。</li>
+    <li>xTaskResumeFromISR：藉中斷恢復任務，引數為任務代碼。INCLUDE_xTaskResumeFromISR預設1，定義在FreeRTOSConfig.h。</li>
+    <li>vTaskSuspendAll：暫停排程，但中斷仍在致能狀態。</li>
+    <li>xTaskResumeAll：恢復經呼叫vTaskSuspendAll所暫停的排程，若經vTaskSuspend暫停的任務仍屬於暫停狀態。</li>
+    </ul>
+    <li>延遲時間與阻擋</li>
+    <p>當呼叫vTaskDelay延遲時間時，在時間未終了前，任務處於「阻擋狀態」，時間終了時，將轉為「未阻擋狀態」(unblocked state)，可以藉由「搶先佔有」取得執行任務。</p>
+</ol>
+<h2>3.3 佇列</h2>
+<p>所謂「佇列」(queue)，是一種線性資料結構，採用First In First Out(FIFO)方式儲存資料，可以設定資料形態與資料長度。前面例題可以了解如何利用Task Notify在它們之間傳遞資料，惟僅限uint32_t資料，無法傳送大量資訊。解決的方式，即透過佇列，可以讓各個任務在彼此之間更有彈性地傳遞訊息。</p>
+<p>佇列相關內容與函式：</p>
+<ol>
+<li>QueueHandle_t：佇列代碼資料型態。</li>
+<li>xQueueCreate：產生佇列，2個引數，佇列代碼與佇列長度。</li>
+<li>xQueueGenericSend：將資料排入佇列，4個引數，佇列代碼、資料所在暫存指標、等候時間、資料排列方式，其中等候時間為任務等待佇列有空間接受資料存入的時間，資料型態為TickType_t。資料排列方式有
+<ul>
+    <li>queueSEND_TO_BACK：先進先出(first in first out；FIFO)</li>
+    <li>queueSEND_TO_FRONT：後進先出(Last in first out；LIFO)</li>
+</ul>
+</li>
+<li>xQueueReceive：讀取佇列資料，同時刪除該筆資料，3個引數，佇列代碼、資料存入指標、等候時間，其中等候時間為任務等待佇列有可供接受資料的時間，資料型態為TickType_t。</li>
+<li>xQueuePeek：讀取佇列資料，該筆資料仍保持在佇列中，3個引數，佇列代碼、資料存入指標、等候時間，其中等候時間資料型態為TickType_t。</li>
+<li>xQueueSendToBack：巨集，相當於xQueueSend將資料以先進先出(FIFO)排入佇列。
+    將資料排入佇列，3個引數，佇列代碼、資料所在暫存指標、等候時間，其中等候時間為任務等待佇列有空間接受資料存入的時間，資料型態為TickType_t。</li>
+<li>xQueueSendToFront：巨集，相當於xQueueSend將資料以後進先出(LIFO)排入佇列。將資料排入佇列，3個引數，佇列代碼、資料所在暫存指標、等候時間，其中等候時間為任務等待佇列有空間接受資料存入的時間，資料型態為TickType_t。</li>
+<li>xQueueSend：巨集，相當於xQueueSendToBack。</li>
+<li>uxQueueSpacesAvailable：取得佇列尚餘空間數。</li>
+</ol> 
+<h2>3.4 例題</h2>
+<h3>1. 例題3.1</h3>
+<p>使用3個任務：任務1：優先次序值10；任務2：優先次序值10；任務3：優先次序值10</p>
+<ul>
+<li>每個任務分別開始顯示Task x started running，x=1、2、3</li>
+<li>每個任務分別間隔9、21、11 ms後顯示Task x finished running，x=1、2、3。</li>
+<li>任務都指定給CPU0執行</li>
+</ul>
+<p><em>程式說明</em></p>
+<ul>
+  <li>app_main產生3個任務：task1、task2、task3，優先次序均為10</li>
+  <pre>
+#include &ltstdio.h&gt
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+static void task1(void *param) {
+    while (1) {
+        printf("Task 1 is running\n");
+        vTaskDelay(9/portTICK_PERIOD_MS);
+    }
+}
+static void task2(void *param) {
+    while (1) {
+        printf("Task 2 is running\n");
+        vTaskDelay(21/portTICK_PERIOD_MS);
+    }
+}
+static void task3(void *param) {
+    while (1) {
+        printf("Task 3 is running\n");
+        vTaskDelay(11/portTICK_PERIOD_MS);
+    }
+}
+void app_main(void) {
+  xTaskCreatePinnedToCore(task1, "First task", 1024*2, 
+    NULL, 10, NULL,0);
+  xTaskCreatePinnedToCore(task2, "Second task", 1024*2,
+    NULL, 11, NULL,0);
+  xTaskCreatePinnedToCore(task3, "Third task", 1024*2,
+    NULL, 12, NULL,0);
+}
+</pre>
+
+<li>執行結果：開始產生task1、task2、task3任務，依序執行任務</li>
+<img src="4.png" alt="" width="400" />
+<ul>
+    <li>Task 1延遲時間9ms，在下一次節拍前解除阻擋</li>
+    <li>Task 2延遲時間21ms，在下一次節拍前無法解除阻擋，CPU0轉執行Task 3</li>
+    <li>Task 3延遲時間11ms，在下一次節拍前解除阻擋</li>
+    <li>最後CPU0執行Task 2</li>
+    <li>本例題主要揭露在相同優先次序下，依據阻擋任務效應如何排程</li>
+    <li>若3個任務的優先次序值分別設為10、11、12，可得到不同結果</li>
+</ul>
+</ul>
+<h3>2. 例題3.2</h3>
+<p>同時進行2個獨立任務，</p>
+<ul>
+<li>任務1：每間隔1s產生0~99隨機整數，儲存至佇列</li>
+<li>任務2：自佇列取出隨機整數，判定是否介於80~90，累計數目，同時計算所占比率</li>
+</ul>
+<p><em>程式說明</em></p>
+<ul>
+<li>內含標頭檔</li>
+<pre>
+  • freertos/queue.h：佇列相關函式庫
+  • esp_random.h：隨機整數產生器
+</pre>
+<li>任務函式task1：無窮迴圈，每圈延遲1000ms</li>
+<pre>
+  • 呼叫esp_random產生隨機整數，取100模數
+  • 呼叫sprintf將整數轉換成字串
+  • 呼叫xQueueSend將隨機整數字串放入佇列
+</pre>
+<li>任務函式task2：無窮迴圈，每圈延�遲500ms。
+<pre>
+  • 呼叫xQueueReceive取得隨機整數字串
+  • 呼叫atoi轉換成整數
+  • 計算所占比率
+</pre>
+<li>app_main函式：
+<pre>
+  • 產生佇列num_queue，長度10個整數
+  • 產生2個任務，堆疊空間2048位元組，優先次序10</pre>
+<pre>
+#include &ltstdio.h&gt
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "esp_random.h"
+
+QueueHandle_t num_queue = NULL;
+
+static void task1(void *param) {
+    int num = 0;
+    char msg[50];
+
+    while (1) {
+        num = esp_random() % 100;
+        sprintf(msg, "%d", num);
+        printf("Random number: %d\n", num);
+        xQueueSend(num_queue, &msg, (TickType_t) 50);
+        vTaskDelay(1000/portTICK_PERIOD_MS);
+    }
+}
+
+static void task2(void *param) {
+    char msg[100];
+    int total = 0;
+    int count = 0;
+    int num = 0;
+    while (1) {
+        if (xQueueReceive(num_queue, &msg, (TickType_t) 50)) {
+            num = atoi(msg);
+            printf("Number received: %d\n", num);
+            if ( num >= 80 && num <= 90) count++;
+            total++;
+            printf("Percentage between 80 to 90: %.2f %c\n", 
+                    (float) count/total*100., '%');
+        }
+        vTaskDelay(500/portTICK_PERIOD_MS);
+    }
+}
+
+void app_main(void) {
+    num_queue = xQueueCreate(10, sizeof(int));
+    xTaskCreate(task1, "First task", 1024*2, NULL, 10, NULL);
+    xTaskCreate(task2, "Second task", 1024*2, NULL, 10, NULL);
+}
+</pre>
+<h3>3. 例題3.3</h3>
+<p>同時進行3個獨立任務，</p>
+<ul>
+    <li>任務1：每間隔1s產生隨機整數，儲存至佇列</li>
+    <li>任務2：自佇列「讀取」隨機整數，判定是否為0，若為0，累計數目，同時計算所占比率，顯示"Percentage in 0: --.-%"，將該值「取出」；若為1，則不作為</li>
+    <li>任務3：自佇列讀取隨機整數，判定是否為1，若為1，累計數目，顯示"Percentage in 1: --.-%"，同時計算所占比率，將該值取出；若為0，則不作為</li>
+</ul>
+<p><em>程式說明</em></p>
+<ul>
+<li>任務函式task1：無窮迴圈，每圈延遲1000ms</li>
+<pre>
+  • 呼叫esp_random產生隨機整數，取2模數
+  • 呼叫sprintf將整數轉換成字串
+  • 呼叫xQueueSend將隨機整數2模數放入佇列
+  • 全域變數total增1
+</pre>
+<li>任務函式task2：無窮迴圈，每圈延遲500ms</li>
+<pre>
+  • 呼叫xQueuePeek讀取隨機整數2模數字串，未刪除
+  • 呼叫atoi轉換成整數
+  • 若所得整數為0，計算所占比率，同時呼叫xQueueReceive將隨機整數2模數字串自佇列中移除
+</pre>
+<li>任務函式task3：無窮迴圈，每圈延遲500ms</li>
+<pre>
+  • 呼叫xQueuePeek讀取隨機整數2模數字串，未刪除
+  • 呼叫atoi轉換成整數若所得整數為1，計算所占比率，同時呼叫xQueueReceive將隨機整數2模數字串自佇列中移除
+</pre>
+<li>app_main函式：</li>
+<pre>
+  • 產生佇列num_queue，長度10個整數
+  • 產生3個任務，堆疊空間2048位元組，優先次序10
+</pre> 
+<pre>
+#include &ltstdio.h&gt
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "esp_random.h"
+
+QueueHandle_t num_queue = NULL;
+static int total = 0;
+
+static void task1(void *param) {
+    int num = 0;
+    char msg[50];
+
+    while (1) {
+        total++;
+        num = esp_random() % 2;
+        sprintf(msg, "%d", num);
+        xQueueSend(num_queue, &msg, (TickType_t) 50);
+        vTaskDelay(1000/portTICK_PERIOD_MS);
+    }
+}
+
+static void task2(void *param) {
+    char msg[100];
+    int count = 0;
+    int num = 0;
+
+    while (1) {
+        if (xQueuePeek(num_queue, &msg, (TickType_t) 50)) {
+            num = atoi(msg);
+            if (num == 0) {
+                count++;
+                printf("Percentage of even group: %.2f %c\n", 
+                        (float) count/total*100., '%');
+                xQueueReceive(num_queue, &msg, 
+                              (TickType_t) 50);
+            };              
+        }
+        vTaskDelay(500/portTICK_PERIOD_MS);
+    }
+}
+
+static void task3(void *param) {
+    char msg[100];
+    int count = 0;
+    int num = 0;
+
+    while (1) {
+        if (xQueuePeek(num_queue, &msg, (TickType_t) 50)) {
+            num = atoi(msg);
+            if (num == 1) {
+                count++;
+                printf("Percentage of odd group: %.2f %c\n", 
+                        (float) count/total*100., '%');
+                xQueueReceive(num_queue, &msg, 
+                              (TickType_t) 50);
+            };               
+        }
+        vTaskDelay(500/portTICK_PERIOD_MS);
+    }
+}
+
+void app_main(void) {
+    num_queue = xQueueCreate(10, sizeof(int));
+    xTaskCreate(task1, "First task", 1024*2, NULL, 10, NULL);
+    xTaskCreate(task2, "Second task", 1024*2, NULL, 10, NULL);
+    xTaskCreate(task3, "Third task", 1024*2, NULL, 10, NULL);
+}
+</pre>
+</body>
+</html>

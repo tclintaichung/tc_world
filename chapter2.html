@@ -7,7 +7,7 @@
     <link rel="stylesheet" type="text/css" href="style.css">
 </head>
 <body>
-<h1>第2章 FreeRTOS Part I</h1>
+<h1>第2章 FreeRTOS (I)</h1>
 <h2>2.1 前言</h2>
 Vanilla FreeRTOS是一個輕量、開源的即時作業系統，它可以處理單核心微控制器或系統單晶片(System on a chip；SoC)。ESP-IDF FreeRTOS是根據Vanilla FreeRTOS第10.5.1版做相當幅度的修改，具備處理雙核心(dual-core)、對稱多處理(symmetric multiprocessing；SMP)等功能。所謂對稱多處理(SMP)，它是一種計算架構，有2個以上的CPU或核心連結至一個共享主記憶體，每一個CPU均獨立執行任務，
 同時由單一作業系統控制，這樣可以得到更有效的CPU運用。本書之後所提及的FreeRTOS，即是指ESP-IDF FreeRTOS。主要參考文件<a href="https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/freertos_idf.html?highlight=freertos" target="_blank">FreeRTOS</a>
@@ -41,36 +41,45 @@ Vanilla FreeRTOS是一個輕量、開源的即時作業系統，它可以處理�
   <h2>2.2 任務</h2>
   <p>一個專案的程式通常會依據需求而有不同的架構，其中序列流(sequential flow)與多工同步(multi-tasking)是主要架構。</p>
   <h3>1.序列流</h3>
-  <p>在app_main程式中的無窮迴圈while(1)，依序執行每行陳述，例如：printf、vTaskDelay等，必須執行該陳述後，才會移至下一陳述，其他陳述都靜靜等著，這種架構稱之為super-loop，各陳述無法同步執行，架構如下：
-  <br>主程式
-  <pre>while (1) {
+  <p>在app_main程式中的無窮迴圈while(1)，依序執行每行陳述，例如：printf、vTaskDelay等，必須執行該陳述後，才會移至下一陳述，其他陳述都靜靜等著，這種架構稱之為super-loop，各陳述無法同步執行。</p>
+  <br>程式架構
+  <pre>
+void app_main(void) {
+  while (1) {
     do Task 1;
     do Task 2;
+  }
 }</pre>
 <h3>2.多工同步</h3>
 <p>微控制器的應用程式由多個任務組成，分別有負責讀取訊號、數位輸出、顯示資料、或資料傳輸等不同需求的任務，每個任務都需要同步執行，即多工(multi-tasking)；也就是不能讓整個程式停駐在一處，只是在等候接收某一感測訊號，在訊號未送達前，其餘任務都閒著等候。因此要有效運用CPU，同步是一個解決的方式，架構如下：主程式產生任務，各任務獨立執行</p>
   <br>
-  主程式
+  程式架構
   <pre>
-create Task 1;
-create Task 2;
-
-// Task 1
-while (1) {
-	do Task;
+// Task 1 function
+static void task1(void *param) {
+  while (1) {
+	  do some Task;
+  }
 }
-// Task 2
-while (1) {
-	do Task;
+// Task 2 function
+static void task2(void *param) {
+  while (1) {
+	  do some Task;
+  }
+}
+void app_main(void) {
+  xTaskCreate(task1, "First task", 1024*2, NULL, 10, NULL);
+  xTaskCreate(task2, "Second task", 1024*2, NULL, 10, NULL);
 }
   </pre>
 <p>由於單個CPU一次只能處理一個任務或工作，若有多個任務要執行，理論上是無法同步的，而所謂「即時作業系統」應運而生，它的基本概念就是快速切換執行各任務，使用者感覺就像同步執行。至於切換原則以及工作原理，將在「排程」章節裡說明。</p>
 <h3>3.任務相關函式</h3>
 <p>在這先針對任務(task)進行說明，任務以函式呈現，它的特色</p>
-<pre>
-  • 獨立執行
-  • 無窮迴圈，每間隔一段時間執行一次，例如：100 ms
-  • 沒有回傳值</pre>
+<ul> 
+  <li>獨立執行</li>
+  <li>無窮迴圈，每間隔一段時間執行一次，例如：100 ms</li>
+  <li>沒有回傳值</li>
+</ul>
 <ol type="i"><li>vTaskDelay：延遲一段時間，引數tick數，此段時間任務處於未阻擋狀態(unblock state)。例如：延遲500 ms，語法為vTaskDelay(500/portTICK_PERIOD_MS)，相當於50 ticks。</li> 
 <li>xTaskCreate：產生新任務，動態配置記憶體，有6個引數</li>
 <pre>
@@ -108,6 +117,10 @@ while (1) {
       - eSetValueWithOverwrite：覆蓋原值，無論是否已讀，永遠回傳pdPASS
       - eSetValueWithoutOverwrite：若已收到通知，無待辦通知(notification pending)，覆蓋原值，並回傳pdPASS；反之，仍有待辦通知，回傳pdFAIL
   </pre>
+  <p style="color:red"><strong>※若有2個以上Notification，務必要設定configTASK_NOTIFICATION_ARRAY_ENTRIES的值。</strong></p>
+  <p>啟動menuconfig</p>
+  <p>$ idf.py menuconfig</p>
+  <p>Component config --- > FreeRTOS --- > Kernel，設定configTASK_NOTIFICATION_ARRAY_ENTRIES大於1，範圍1至32。</p>
   <li>xTaskNotify：傳遞通知，3個引數，僅一個通知，相當於xTaskNotifyIndexed之uxIndexToNotify設為0，其餘引數相同</li>
   <li>xTaskNotifyWaitIndexed：等候指標通知，5個引數</li>
   <pre>
@@ -120,9 +133,11 @@ while (1) {
   <li>xTaskNotifyWait：等候一個通知，4個引數，相當於xTaskNotifyWaitIndexed之uxIndexToWaitOn設為0，其餘同</li>
   <li>vTaskSuspendAll</li>
   <li>xTaskResumeAll</li>
-<h2>例題2.1</h2>
+  </ol>
+<h2>2.3 例題</h2>
+<h3>1. 例題2.1</h3>
 <p>每隔1s顯示累增秒數，超過100s後歸零，重新計數。</p>
-<h3>程式說明</h3>
+<p><em>程式說明</em></p>
 <ul>
   <li>內含標頭檔</li>
   <pre>
@@ -152,17 +167,16 @@ void app_main(void) {
 }
   </pre>
 </ul>  
-<h2>例題2.2</h2>
+<h3>2. 例題2.2</h3>
 <p>同時進行2個獨立任務，</p>
 <ul>
   <li>任務1：每間隔500ms顯示"Task 1 functioning: %d\n"</li>
   <li>任務2：每間隔500ms顯示"Task 2 functioning: %d\n"</li>
 </ul>
-<h3>程式說明</h3>
+<p><em>程式說明</em></p>
 <ul>
-    <li>任務函式task1、task2：無窮迴圈，每圈延遲500ms</li>
-    <li>app_main：產生2個任務，堆疊空間2048位元組，優先次序10。app_main產生任務後，就無下一步動作。未指定CPU，由作業系統排定執行時程，如何排程會在後面說明。</li>
-</ul>
+  <li>任務函式task1、task2：無窮迴圈，每圈延遲500ms</li>
+  <li>app_main：產生2個任務，堆疊空間2048位元組，優先次序10。app_main產生任務後，就無下一步動作。未指定CPU，由作業系統排定執行時程，如何排程會在後面說明。</li>
 <pre>
 #include &ltstdio.h&gt
 #include "freertos/FreeRTOS.h"
@@ -191,5 +205,158 @@ void app_main(void) {
   xTaskCreate(task2, "Second task", 1024*2, NULL, 10, NULL);
 }
 </pre>
+</ul>
+<p>前一例題2個任務同時各自執行，互不相干，若它們之間需要傳遞資料，則可以利用Task Notify的功能，以下2個例題即是它的應用。
+<h3>3. 例題2.3</h3>
+<p>使用2個任務：任務1每隔500 ms產生1個0~99的隨機整數，當產生10個後，利用xTaskNotify將平均值傳給任務2，接收到後顯示平均值。</p>
+<em>程式說明</em></p>
+<ol type="i"> 
+<li>任務函式random_task：無窮迴圈，每圈延遲500ms。</li>
+<ul>
+<li>連續產生10個介於0到99隨機整數</li>
+<li>呼叫xTaskNotify通知並傳送資料給任務average_task</li>
+</ul>
+
+<li>任務函式average_task：無窮迴圈，每圈延遲500ms。</li>
+<ul>
+<li>呼叫xTaskNotifyWait檢查是否收到通知，回傳xResult</li>
+<li>若xResult等於pdPASS，表示得到通知，顯示平均值</li>
+</ul>
+<li>app_main函式：產生2個任務，堆疊空間2048位元組，優先次序10。</li>
+</ol>
+<pre>
+#include &ltstdio.h&gt
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include &ltlimits.h&gt;
+
+static TaskHandle_t xHandlingTask;
+
+static void random_task(void *param) {
+  static int random1;
+  const int max = 10;
+  int count = 0;
+  static uint32_t total = 0;
+
+  while (1) {
+    if (count < max) {
+      random1 = rand() % 100;
+      total += random1;
+      count++;
+    } else {
+      total = (uint32_t) total / 10.0;
+      xTaskNotify(xHandlingTask, total, eSetBits); 
+      count = 0;
+    }
+    vTaskDelay(500/portTICK_PERIOD_MS);
+  }
+}
+static void average_task(void *param) {
+  BaseType_t xResult;
+  const TickType_t xMaxBlockTime = 500/portTICK_PERIOD_MS;
+  static uint32_t total;
+
+  while (1) {
+    xResult = xTaskNotifyWait(pdFALSE, ULONG_MAX, &total, xMaxBlockTime);
+    if (xResult == pdPASS) printf("Average: %ld\n", total);
+    vTaskDelay(500/portTICK_PERIOD_MS);
+  }
+}
+void app_main(void) {
+  xTaskCreate(random_task, "Generate 10 rand no", 
+    2048, NULL, 10, NULL);
+  xTaskCreate(average_task, "Average 10 rand no", 
+    2048, NULL, 10, &xHandlingTask);
+}
+</pre>
+<h3>4. 例題2.4</h3>
+<p>
+使用3個任務：任務1每隔50 ms產生100個0~99的隨機整數，分別計算偶數、奇數個數，利用xTaskNotifyIndexed將偶數、奇數傳給任務2、任務3，接收到後顯示個數。註：指標0傳送通知給任務2，顯示偶數個數；指標1傳送通知給任務3，顯示奇數個數。
+</p>
+<p><em>程式說明</em></p>
+<ol type="i">
+<li>任務函式random_task：無窮迴圈，每圈延遲50ms</li>
+    <ul>
+      <li>連續產生100個介於0到99隨機整數</li>
+      <li>計算偶數、奇數個數</li>
+      <li>呼叫xTaskNotifyIndexed通知並傳送資料給任務average_task</li>
+      <li>指標0：傳送通知與even數值給even_task</li>
+      <li>指標1：傳送通知與odd數值給odd_task</li>
+    </ul>
+
+  <li>任務函式even_task：無窮迴圈，每圈延遲50ms</li>
+    <ul>
+    <li>呼叫xTaskNotifyWaitIndexed檢查是否收到通知，回傳xResult</li>
+    <li>如果xResult等於pdPASS，表示得到通知，顯示累計偶數個數</li>
+    </ul>
+
+  <li>任務函式odd_task：無窮迴圈，每圈延遲50ms</li>
+    <ul>
+    <li>呼叫xTaskNotifyWaitIndexed檢查是否收到通知，回傳xResult</li>
+    <li>如果xResult等於pdPASS，表示得到通知，顯示累計奇數個數</li>
+    </ul>
+
+  <li>app_main函式：產生3個任務，堆疊空間2048位元組，random_task的優先次序12，其餘為10。</li>
+  <pre>
+#include &ltstdio.h&gt
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include &ltlimits.h&gt
+static TaskHandle_t hdl_even_task;
+static TaskHandle_t hdl_odd_task;
+
+static void random_task(void *param) {
+  static int random1;
+  const int max = 100;
+  int count = 0;
+  static uint32_t even = 0, odd = 0;
+
+  while (1) {
+    if (count < max) {
+      random1 = rand() % 100;
+      if (random1 % 2 == 0) even++;
+      else odd++;
+      count++;
+    } else {
+      xTaskNotifyIndexed(hdl_even_task, 0, even, eSetBits); 
+      xTaskNotifyIndexed(hdl_odd_task, 1, odd, eSetBits); 
+      count = 0;
+    }
+    vTaskDelay(50/portTICK_PERIOD_MS);
+  }
+}
+static void even_task(void *param) {
+  BaseType_t xResult;
+  const TickType_t xMaxBlockTime = 500/portTICK_PERIOD_MS;
+  static uint32_t even;
+
+  while (1) {
+    xResult = xTaskNotifyWaitIndexed( 0, pdFALSE, pdFALSE, &even, xMaxBlockTime);
+    if (xResult == pdPASS) printf("Even no: %ld\n", even);
+    vTaskDelay(100/portTICK_PERIOD_MS);
+  }
+}
+static void odd_task(void *param) {
+  BaseType_t xResult;
+  const TickType_t xMaxBlockTime = 500/portTICK_PERIOD_MS;
+  static uint32_t odd;
+
+  while (1) {
+    xResult = xTaskNotifyWaitIndexed( 1, pdFALSE, pdFALSE, &odd, xMaxBlockTime);
+    if (xResult == pdPASS) printf("Odd no: %ld\n", odd);
+    vTaskDelay(100/portTICK_PERIOD_MS);
+  }
+}
+
+void app_main(void) {
+  xTaskCreate(random_task, "Generate 10 rand no", 
+    2048, NULL, 12, NULL);
+  xTaskCreate(even_task, "Even no count", 
+    2048, NULL, 10, &hdl_even_task);
+  xTaskCreate(odd_task, "Odd no count", 
+    2048, NULL, 10, &hdl_odd_task);
+}
+  </pre>
+</ol>
 </body>
 </html>
